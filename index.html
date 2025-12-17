@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Herramienta de referencia rápida para comandos de Active Directory">
+    <title>My AD Explorer</title>
+    
+    <!-- Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <!-- Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    animation: {
+                        'gradient-x': 'gradient-x 15s ease infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'slide-up': 'slideUp 0.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        'gradient-x': {
+                            '0%, 100%': { 'background-size': '200% 200%', 'background-position': 'left center' },
+                            '50%': { 'background-size': '200% 200%', 'background-position': 'right center' },
+                        },
+                        'float': {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: 0, transform: 'translateY(20px)' },
+                            '100%': { opacity: 1, transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base styles */
+        body {
+            background: linear-gradient(-45deg, #0f172a, #1e1b4b, #172554, #0f172a);
+            background-size: 400% 400%;
+            animation: gradient-x 15s ease infinite;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        /* Utilities */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); }
+        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #60a5fa; }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+        }
+        
+        .glass-panel:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-header {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .code-block-wrapper {
+            background: #0d1117;
+            border-left: 4px solid #3b82f6;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .code-block-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.05), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.5s;
+        }
+
+        .code-block-wrapper:hover {
+            border-left-color: #60a5fa;
+            transform: scale-[1.01];
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.2);
+        }
+
+        .code-block-wrapper:hover::after {
+            transform: translateX(100%);
+            transition: transform 1s ease-in-out;
+        }
+
+        /* Form elements */
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2360a5fa' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 1rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+        }
+
+        /* Syntax Theme */
+        .token-cmd { color: #facc15; text-shadow: 0 0 10px rgba(250, 204, 21, 0.2); }
+        .token-param { color: #60a5fa; }
+        .token-str { color: #a5f3fc; }
+        .token-var { color: #fb7185; }
+
+        .glow-text { text-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-blue-500 selection:text-white">
+
+    <!-- Top Navigation -->
+    <header class="w-full p-5 glass-header sticky top-0 z-50 transition-all duration-300">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-4 group cursor-default">
+                <div class="relative">
+                    <div class="absolute inset-0 bg-blue-500 blur-lg opacity-20 rounded-full group-hover:opacity-40 transition-opacity"></div>
+                    <i class="fa-brands fa-windows text-4xl text-blue-500 relative z-10 animate-float"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-extrabold text-white tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 group-hover:from-blue-400 group-hover:to-white transition-all duration-500">
+                        My AD <span class="text-blue-500 glow-text">Explorer</span>
+                    </h1>
+                    <p class="text-xs text-blue-300/80 font-mono tracking-widest uppercase">Active Directory Domain Services</p>
+                </div>
+            </div>
+            <a href="#" class="px-4 py-2 rounded-full border border-gray-700 bg-gray-800/50 hover:bg-blue-600/20 hover:border-blue-500/50 text-sm text-gray-300 hover:text-white transition-all duration-300 flex items-center gap-2 group">
+                <i class="fa-regular fa-circle-question group-hover:rotate-12 transition-transform"></i> Ayuda Rápida
+            </a>
+        </div>
+    </header>
+
+    <!-- App Container -->
+    <main class="flex-grow max-w-6xl mx-auto w-full p-4 md:p-8 flex flex-col gap-10">
+        
+        <!-- Controls Section -->
+        <div class="glass-panel rounded-3xl p-8 md:p-12 animate-slide-up" style="animation-delay: 0.1s;">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-2 h-8 bg-blue-500 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.6)]"></div>
+                <h2 class="text-2xl text-white font-bold tracking-tight">Panel de Control</h2>
+            </div>
+            
+            <div class="flex flex-col md:flex-row gap-6 items-start md:items-center relative">
+                
+                <!-- Category Selector -->
+                <div class="w-full md:w-5/12 group">
+                    <label class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 ml-1 group-hover:text-blue-300 transition-colors">Categoría</label>
+                    <div class="relative">
+                        <select id="selCategory" class="w-full bg-gray-900/80 border border-gray-700 text-white text-lg rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-gray-900 block p-4 pl-5 transition-all shadow-lg hover:border-gray-500 cursor-pointer outline-none">
+                            <option value="" disabled selected>Selecciona un objeto...</option>
+                        </select>
+                        <div class="absolute inset-0 rounded-xl pointer-events-none border border-transparent group-hover:border-blue-500/30 transition-colors"></div>
+                    </div>
+                </div>
+
+                <div class="hidden md:flex justify-center w-2/12 pt-8">
+                    <i class="fa-solid fa-arrow-right-long text-2xl text-gray-600 animate-pulse"></i>
+                </div>
+
+                <!-- Contextual Action Selector -->
+                <div class="w-full md:w-5/12 opacity-50 pointer-events-none transition-all duration-500 transform translate-x-[-10px]" id="actionWrapper">
+                    <label class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 ml-1">Acción</label>
+                    <div class="relative">
+                        <select id="selAction" class="w-full bg-gray-900/80 border border-gray-700 text-white text-lg rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-gray-900 block p-4 pl-5 transition-all shadow-lg hover:border-gray-500 cursor-pointer outline-none">
+                            <option value="" disabled selected>...para hacer esto</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <div id="outputPanel" class="hidden flex flex-col gap-8">
+            
+            <!-- Terminal/Code View -->
+            <div class="code-block-wrapper rounded-2xl p-8 shadow-2xl animate-slide-up" style="animation-delay: 0.2s;">
+                <div class="flex justify-between items-start mb-4 border-b border-gray-800 pb-4">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-terminal text-blue-500"></i>
+                        <h3 class="text-gray-300 text-xs font-bold uppercase tracking-widest">PowerShell Command</h3>
+                    </div>
+                    <button id="btnCopy" class="group bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 hover:border-blue-500 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 flex items-center gap-2 backdrop-blur-sm">
+                        <i class="fa-regular fa-copy group-hover:scale-110 transition-transform"></i> <span id="lblCopy">Copiar</span>
+                    </button>
+                </div>
+                
+                <div class="font-mono text-sm md:text-lg break-all md:break-normal leading-relaxed overflow-x-auto pb-2 scrollbar-hide" id="codeViewport">
+                    <!-- Dynamic Content -->
+                </div>
+            </div>
+
+            <!-- Details Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Analysis Card -->
+                <div class="glass-panel p-8 rounded-3xl border-t-4 border-t-purple-500 hover:-translate-y-1 animate-slide-up" style="animation-delay: 0.3s;">
+                    <div class="absolute -top-6 left-6 bg-purple-600 text-white p-3 rounded-xl shadow-lg shadow-purple-900/50">
+                        <i class="fa-solid fa-layer-group text-xl"></i>
+                    </div>
+                    <h3 class="mt-4 text-xl font-bold text-white mb-6">Análisis</h3>
+                    <ul id="listExplanation" class="space-y-4 text-gray-300 text-sm leading-relaxed"></ul>
+                </div>
+
+                <!-- Tips Card -->
+                <div class="glass-panel p-8 rounded-3xl border-t-4 border-t-yellow-500 hover:-translate-y-1 animate-slide-up" style="animation-delay: 0.4s;">
+                     <div class="absolute -top-6 left-6 bg-yellow-500 text-black p-3 rounded-xl shadow-lg shadow-yellow-900/50">
+                        <i class="fa-solid fa-bolt text-xl"></i>
+                    </div>
+                    <h3 class="mt-4 text-xl font-bold text-white mb-6">Pro Tip</h3>
+                    <div class="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-5">
+                        <p id="txtProTip" class="text-gray-300 text-sm leading-relaxed font-medium"></p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="text-center py-20 opacity-40 animate-pulse">
+            <div class="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                <i class="fa-solid fa-code-branch text-5xl text-gray-600"></i>
+            </div>
+            <p class="text-gray-400 text-xl font-light tracking-wide">Comienza seleccionando una categoría arriba</p>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full py-8 mt-auto bg-black/20 backdrop-blur-md border-t border-gray-800">
+        <div class="max-w-6xl mx-auto flex flex-col items-center justify-center gap-2">
+            <p class="text-gray-500 text-sm font-medium">My AD Explorer v2.1</p>
+            <p class="text-gray-400 text-sm font-semibold flex items-center gap-2">
+                Hecho por <span class="text-blue-400">Rohit K.</span>
+                <i class="fa-solid fa-laptop-code text-xs text-gray-600"></i>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Notification Component -->
+    <div id="toastNotification" class="fixed bottom-10 right-10 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-xl shadow-[0_10px_40px_rgba(16,185,129,0.4)] transform translate-y-32 opacity-0 transition-all duration-500 flex items-center gap-4 z-50 border border-green-400/30 backdrop-blur-md">
+        <div class="bg-white/20 p-2 rounded-full">
+            <i class="fa-solid fa-check text-white"></i>
+        </div>
+        <div>
+            <h4 class="font-bold text-sm">¡Éxito!</h4>
+            <p class="text-xs text-green-100">Comando copiado al portapapeles</p>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        /**
+         * AD Explorer Configuration & Database
+         * Author: Rohit K.
+         * Version: 2.1.0
+         */
+
+        const CMD_DB = {
+            users: {
+                label: "Usuarios (Users)",
+                actions: [
+                    {
+                        id: "create_std_user",
+                        label: "Crear un nuevo usuario simple",
+                        raw: `New-ADUser -Name "Juan Perez" -SamAccountName "jperez" -UserPrincipalName "jperez@dominio.local" -AccountPassword $password -Enabled $true`,
+                        tokens: `<span class="token-cmd">New-ADUser</span> <span class="token-param">-Name</span> <span class="token-str">"Juan Perez"</span> <span class="token-param">-SamAccountName</span> <span class="token-str">"jperez"</span> <span class="token-param">-UserPrincipalName</span> <span class="token-str">"jperez@dominio.local"</span> <span class="token-param">-AccountPassword</span> <span class="token-var">$password</span> <span class="token-param">-Enabled</span> <span class="token-var">$true</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>New-ADUser:</strong> Comando base de instanciación.",
+                            "<strong class='text-blue-300'>-SamAccountName:</strong> Identificador legacy (pre-Win2k).",
+                            "<strong class='text-blue-300'>-UserPrincipalName:</strong> Identificador moderno (formato email).",
+                            "<strong class='text-blue-300'>-Enabled $true:</strong> Flag de activación inmediata."
+                        ],
+                        tip: "Prerrequisito: Generar SecureString para el password. <br><code class='bg-black/30 px-1 rounded text-yellow-300'>$password = Read-Host -AsSecureString</code>"
+                    },
+                    {
+                        id: "reset_pwd",
+                        label: "Restablecer contraseña",
+                        raw: `Set-ADAccountPassword -Identity "jperez" -Reset -NewPassword $newPassword`,
+                        tokens: `<span class="token-cmd">Set-ADAccountPassword</span> <span class="token-param">-Identity</span> <span class="token-str">"jperez"</span> <span class="token-param">-Reset</span> <span class="token-param">-NewPassword</span> <span class="token-var">$newPassword</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>-Identity:</strong> Target user (SAM, DN, GUID).",
+                            "<strong class='text-blue-300'>-Reset:</strong> Fuerza el cambio administrativo (admin override)."
+                        ],
+                        tip: "Tip: Añadir <code class='bg-black/30 px-1 rounded text-yellow-300'>-Unlock</code> para desbloquear en la misma operación."
+                    },
+                    {
+                        id: "unlock_acct",
+                        label: "Desbloquear una cuenta",
+                        raw: `Unlock-ADAccount -Identity "jperez"`,
+                        tokens: `<span class="token-cmd">Unlock-ADAccount</span> <span class="token-param">-Identity</span> <span class="token-str">"jperez"</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>Unlock-ADAccount:</strong> Limpia el flag de bloqueo de seguridad.",
+                            "<strong class='text-blue-300'>-Identity:</strong> Cuenta afectada."
+                        ],
+                        tip: "Diagnóstico: <code class='bg-black/30 px-1 rounded text-yellow-300'>Search-ADAccount -LockedOut</code> lista todos los bloqueados."
+                    },
+                    {
+                        id: "get_user_props",
+                        label: "Ver detalles de usuario",
+                        raw: `Get-ADUser -Identity "jperez" -Properties *`,
+                        tokens: `<span class="token-cmd">Get-ADUser</span> <span class="token-param">-Identity</span> <span class="token-str">"jperez"</span> <span class="token-param">-Properties</span> <span class="token-var">*</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>Get-ADUser:</strong> Recuperación de objeto.",
+                            "<strong class='text-blue-300'>-Properties *:</strong> Wildcard para fetch de atributos extendidos."
+                        ],
+                        tip: "Performance: Evitar <code class='bg-black/30 px-1 rounded text-yellow-300'>*</code> en producción. Solicitar propiedades específicas."
+                    }
+                ]
+            },
+            groups: {
+                label: "Grupos (Groups)",
+                actions: [
+                    {
+                        id: "new_sec_group",
+                        label: "Crear un grupo de seguridad",
+                        raw: `New-ADGroup -Name "Finanzas_RW" -GroupScope Global -GroupCategory Security`,
+                        tokens: `<span class="token-cmd">New-ADGroup</span> <span class="token-param">-Name</span> <span class="token-str">"Finanzas_RW"</span> <span class="token-param">-GroupScope</span> <span class="token-str">Global</span> <span class="token-param">-GroupCategory</span> <span class="token-str">Security</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>-GroupScope:</strong> DomainLocal, Global, Universal.",
+                            "<strong class='text-blue-300'>-GroupCategory:</strong> Security (ACLs) vs Distribution (Email)."
+                        ],
+                        tip: "Best Practice: Usar nomenclatura descriptiva. Ej: <code class='bg-black/30 px-1 rounded text-yellow-300'>Dep_Rol_Acceso</code>."
+                    },
+                    {
+                        id: "add_member",
+                        label: "Añadir usuario a grupo",
+                        raw: `Add-ADGroupMember -Identity "Finanzas_RW" -Members "jperez", "mariag"`,
+                        tokens: `<span class="token-cmd">Add-ADGroupMember</span> <span class="token-param">-Identity</span> <span class="token-str">"Finanzas_RW"</span> <span class="token-param">-Members</span> <span class="token-str">"jperez"</span>, <span class="token-str">"mariag"</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>-Identity:</strong> Grupo destino.",
+                            "<strong class='text-blue-300'>-Members:</strong> Array de usuarios a vincular."
+                        ],
+                        tip: "Bulk ops: <code class='bg-black/30 px-1 rounded text-yellow-300'>Import-Csv users.csv | Add-ADGroupMember...</code>"
+                    },
+                    {
+                        id: "get_members",
+                        label: "Ver miembros de un grupo",
+                        raw: `Get-ADGroupMember -Identity "Administradores" | Select-Object Name, SamAccountName`,
+                        tokens: `<span class="token-cmd">Get-ADGroupMember</span> <span class="token-param">-Identity</span> <span class="token-str">"Administradores"</span> | <span class="token-cmd">Select-Object</span> <span class="token-param">Name</span>, <span class="token-param">SamAccountName</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>Get-ADGroupMember:</strong> Enumera objetos hijos.",
+                            "<strong class='text-blue-300'>Select-Object:</strong> Proyección de propiedades útiles."
+                        ],
+                        tip: "Recursividad: Usar <code class='bg-black/30 px-1 rounded text-yellow-300'>-Recursive</code> para resolver grupos anidados."
+                    }
+                ]
+            },
+            computers: {
+                label: "Equipos (Computers)",
+                actions: [
+                    {
+                        id: "query_os",
+                        label: "Buscar por Sistema Operativo",
+                        raw: `Get-ADComputer -Filter 'OperatingSystem -like "*Server*"' -Properties OperatingSystem`,
+                        tokens: `<span class="token-cmd">Get-ADComputer</span> <span class="token-param">-Filter</span> <span class="token-str">'OperatingSystem -like "*Server*"'</span> <span class="token-param">-Properties</span> <span class="token-str">OperatingSystem</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>-Filter:</strong> Query string (sintaxis PowerShell expression).",
+                            "<strong class='text-blue-300'>*Server*:</strong> Wildcard matching."
+                        ],
+                        tip: "Eficiencia: Filter server-side > Where-Object client-side."
+                    },
+                    {
+                        id: "move_obj",
+                        label: "Mover equipo a otra OU",
+                        raw: `Move-ADObject -Identity "CN=PC-01,CN=Computers,DC=dominio,DC=local" -TargetPath "OU=Ventas,DC=dominio,DC=local"`,
+                        tokens: `<span class="token-cmd">Move-ADObject</span> <span class="token-param">-Identity</span> <span class="token-str">"PC-01..."</span> <span class="token-param">-TargetPath</span> <span class="token-str">"OU=Ventas..."</span>`,
+                        details: [
+                            "<strong class='text-blue-300'>Move-ADObject:</strong> Comando genérico de reubicación.",
+                            "<strong class='text-blue-300'>-TargetPath:</strong> Destination Distinguished Name (DN)."
+                        ],
+                        tip: "Pipelining: <code class='bg-black/30 px-1 rounded text-yellow-300'>Get-ADComputer PC-01 | Move-ADObject...</code> simplifica la sintaxis."
+                    }
+                ]
+            },
+            troubleshoot: {
+                label: "Diagnóstico (Troubleshoot)",
+                actions: [
+                    {
+                        id: "audit_lockout",
+                        label: "Ver usuarios bloqueados",
+                        raw: `Search-ADAccount -LockedOut | Select-Object Name, LockedOutTime`,
+                        tokens: `<span class="token-cmd">Search-ADAccount</span> <span class="token-param">-LockedOut</span> | <span class="token-cmd">Select-Object</span> Name, LockedOutTime`,
+                        details: [
+                            "<strong class='text-blue-300'>Search-ADAccount:</strong> Cmdlet de auditoría rápida.",
+                            "<strong class='text-blue-300'>-LockedOut:</strong> Filtro predefinido de estado."
+                        ],
+                        tip: "Alternativas: <code class='bg-black/30 px-1 rounded text-yellow-300'>-AccountDisabled</code>, <code class='bg-black/30 px-1 rounded text-yellow-300'>-PasswordExpired</code>."
+                    },
+                    {
+                        id: "check_fsmo",
+                        label: "Ver roles FSMO del dominio",
+                        raw: `Get-ADDomainController -Filter * | Select-Object Name, OperationMasterRoles`,
+                        tokens: `<span class="token-cmd">Get-ADDomainController</span> <span class="token-param">-Filter</span> * | <span class="token-cmd">Select-Object</span> Name, OperationMasterRoles`,
+                        details: [
+                            "Enumera controladores y asignación de roles maestros (PDC, RID, Infrastructure, etc.)."
+                        ],
+                        tip: "Forest Level: <code class='bg-black/30 px-1 rounded text-yellow-300'>Get-ADForest | Select SchemaMaster...</code>"
+                    }
+                ]
+            }
+        };
+
+        // Cache DOM references
+        const refs = {
+            selCategory: document.getElementById('selCategory'),
+            selAction: document.getElementById('selAction'),
+            actionWrapper: document.getElementById('actionWrapper'),
+            outputPanel: document.getElementById('outputPanel'),
+            emptyState: document.getElementById('emptyState'),
+            codeViewport: document.getElementById('codeViewport'),
+            listExplanation: document.getElementById('listExplanation'),
+            txtProTip: document.getElementById('txtProTip'),
+            btnCopy: document.getElementById('btnCopy'),
+            lblCopy: document.getElementById('lblCopy'),
+            toast: document.getElementById('toastNotification')
+        };
+
+        const bootstrap = () => {
+            // Initialize Categories
+            Object.keys(CMD_DB).forEach(key => {
+                const opt = new Option(CMD_DB[key].label, key);
+                refs.selCategory.add(opt);
+            });
+
+            // Bind Events
+            refs.selCategory.addEventListener('change', onCategorySelect);
+            refs.selAction.addEventListener('change', onActionSelect);
+            refs.btnCopy.addEventListener('click', copyToClipboard);
+        };
+
+        const onCategorySelect = (e) => {
+            const catKey = e.target.value;
+            const data = CMD_DB[catKey];
+
+            // Reset UI state
+            refs.selAction.innerHTML = '<option value="" disabled selected>...para hacer esto</option>';
+            refs.outputPanel.classList.add('hidden');
+            refs.emptyState.classList.remove('hidden');
+
+            if (!data) return;
+
+            // Populate Actions
+            data.actions.forEach((act, idx) => {
+                const opt = new Option(act.label, idx);
+                refs.selAction.add(opt);
+            });
+
+            // Transition UI
+            refs.actionWrapper.classList.remove('opacity-50', 'pointer-events-none', 'translate-x-[-10px]');
+            refs.selAction.focus();
+        };
+
+        const onActionSelect = () => {
+            const catKey = refs.selCategory.value;
+            const actIdx = refs.selAction.value;
+
+            if (!catKey || actIdx === "") return;
+
+            const action = CMD_DB[catKey].actions[actIdx];
+            renderView(action);
+        };
+
+        const renderView = (data) => {
+            // UI Toggle
+            refs.emptyState.classList.add('hidden');
+            refs.outputPanel.classList.remove('hidden');
+
+            // Animation Reset (Force reflow)
+            const animatables = refs.outputPanel.querySelectorAll('.animate-slide-up');
+            animatables.forEach(el => {
+                el.style.animation = 'none';
+                void el.offsetHeight; 
+                el.style.animation = null; 
+            });
+
+            // Inject Content
+            refs.codeViewport.innerHTML = data.tokens || data.raw;
+            refs.codeViewport.dataset.raw = data.raw; // Store for clipboard
+
+            // Parse Explanations
+            refs.listExplanation.innerHTML = data.details
+                .map(item => `<li class="flex items-start gap-3 bg-white/5 p-3 rounded-lg border border-white/5"><i class="fa-solid fa-angle-right text-blue-500 mt-1"></i> <div>${item}</div></li>`)
+                .join('');
+
+            refs.txtProTip.innerHTML = data.tip;
+            
+            // Mobile Optimization
+            if (window.innerWidth < 768) {
+                refs.outputPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
+
+        const copyToClipboard = () => {
+            const content = refs.codeViewport.dataset.raw;
+            if (!content) return;
+
+            // Using modern Clipboard API if available, fallback to textarea hack
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(content).then(triggerToast);
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = content;
+                textArea.style.position = "fixed"; // avoid scrolling to bottom
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    triggerToast();
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                }
+                document.body.removeChild(textArea);
+            }
+
+            // Button Feedback
+            refs.lblCopy.textContent = "¡Copiado!";
+            setTimeout(() => refs.lblCopy.textContent = "Copiar", 2000);
+        };
+
+        const triggerToast = () => {
+            const t = refs.toast;
+            t.classList.remove('translate-y-32', 'opacity-0');
+            setTimeout(() => t.classList.add('translate-y-32', 'opacity-0'), 3000);
+        };
+
+        // Start App
+        document.addEventListener('DOMContentLoaded', bootstrap);
+
+    </script>
+</body>
+</html>
